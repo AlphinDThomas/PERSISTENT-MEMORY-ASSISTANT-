@@ -1,0 +1,29 @@
+# Python bytecode and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Local configuration and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# Downloaded models and generated recordings
+/models/
+/checkpoints/
+/recordings/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.opus
+*.aac
+
+# OS-generated files
+.DS_Store
+Thumbs.db
