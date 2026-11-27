@@ -20,6 +20,41 @@ On Linux, install PortAudio if microphone support requires it:
 sudo apt install libportaudio2
 ```
 
+Copy `.env.example` to `.env` if needed, then configure the endpoint and model:
+
+```bash
+cp .env.example .env
+# Edit OLLAMA_HOST and OLLAMA_MODEL in .env
+```
+
+By default, the client connects to `http://localhost:11434` using
+`gemma4:e4b`. Install and start Ollama (the desktop app or `ollama serve`) on
+the machine hosting the model, then pull the model selected in `.env`, for
+example:
+
+```bash
+ollama pull gemma4:e4b
+```
+
+For Ollama running on another laptop, set `OLLAMA_HOST` in this laptop's `.env`
+to the Ollama laptop's reachable address, for example
+`http://192.168.1.25:11434`. On the Ollama laptop, configure its server to
+listen on the network (for example, `OLLAMA_HOST=0.0.0.0:11434 ollama serve`)
+and pull the configured model there. Restrict access to a trusted network and
+firewall; do not expose Ollama's unauthenticated port to the public internet.
+
+The app streams assistant responses from the local Ollama model after each
+non-empty transcription. To test Ollama with typed text before starting the
+microphone, run:
+
+```bash
+python vlm_client.py
+```
+
+Change `OLLAMA_MODEL` in `.env` to switch models without editing Python code.
+The `.env` file contains runtime configuration and is ignored by Git; commit
+only the `.env.example` template.
+
 ## Run
 
 Start live microphone transcription:

@@ -11,6 +11,7 @@ The first run downloads the selected Whisper model and Silero VAD from Torch Hub
 
 from __future__ import annotations
 
+import asyncio
 import queue
 import threading
 import time
@@ -22,6 +23,15 @@ import numpy as np
 
 from .event_log import log_speech_event
 from .vad import SileroVAD
+
+
+def _send_transcript_to_assistant(transcript: str) -> None:
+    if not transcript.strip():
+        return
+
+    from vlm_client import generate_response
+
+    asyncio.run(generate_response(transcript))
 
 
 class WhisperTranscriber:
@@ -86,6 +96,7 @@ class WhisperTranscriber:
             transcript=transcript,
             transcription_time_seconds=time.perf_counter() - started,
         )
+        _send_transcript_to_assistant(transcript)
         return transcript
 
 
@@ -140,6 +151,7 @@ class WhisperSTT(WhisperTranscriber):
                 transcript=transcript,
                 transcription_time_seconds=time.perf_counter() - started,
             )
+            _send_transcript_to_assistant(transcript)
             transcripts.append(transcript)
         return " ".join(text for text in transcripts if text)
 
@@ -176,15 +188,6 @@ class WhisperSTT(WhisperTranscriber):
                 try:
                     print(f"Transcribing detected speech ({duration:.1f}s)...", flush=True)
                     transcript = self._transcribe(speech_audio)
-                    if transcript:
-                        print(transcript, flush=True)
-                    log_speech_event(
-                        event="speech_segment",
-                        source="live",
-                        duration_seconds=duration,
-                        transcript=transcript,
-                        transcription_time_seconds=time.perf_counter() - started,
-                    )
                 except Exception as error:
                     log_speech_event(
                         event="speech_segment",
@@ -195,6 +198,16 @@ class WhisperSTT(WhisperTranscriber):
                     )
                     transcription_errors.put(error)
                     return
+                log_speech_event(
+                    event="speech_segment",
+                    source="live",
+                    duration_seconds=duration,
+                    transcript=transcript,
+                    transcription_time_seconds=time.perf_counter() - started,
+                )
+                if transcript:
+                    print(transcript, flush=True)
+                    _send_transcript_to_assistant(transcript)
 
         def audio_callback(
             input_data: np.ndarray,
