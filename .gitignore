@@ -11,6 +11,7 @@ env/
 .env.*
 !.env.example
 *.log
+/logs/
 
 # Downloaded models and generated recordings
 /models/

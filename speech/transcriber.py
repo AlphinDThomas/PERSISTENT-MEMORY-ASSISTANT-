@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from collections import deque
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from .event_log import log_speech_event
 from .vad import SileroVAD
 
 
@@ -65,7 +67,26 @@ class WhisperTranscriber:
         from faster_whisper.audio import decode_audio
 
         audio = decode_audio(str(audio_path), sampling_rate=self.sample_rate)
-        return self.transcribe_audio(audio)
+        started = time.perf_counter()
+        try:
+            transcript = self.transcribe_audio(audio)
+        except Exception as error:
+            log_speech_event(
+                event="transcription",
+                source="whisper_file",
+                duration_seconds=audio.size / self.sample_rate,
+                transcription_time_seconds=time.perf_counter() - started,
+                error=str(error),
+            )
+            raise
+        log_speech_event(
+            event="transcription",
+            source="whisper_file",
+            duration_seconds=audio.size / self.sample_rate,
+            transcript=transcript,
+            transcription_time_seconds=time.perf_counter() - started,
+        )
+        return transcript
 
 
 class WhisperSTT(WhisperTranscriber):
@@ -91,14 +112,35 @@ class WhisperSTT(WhisperTranscriber):
 
         audio = decode_audio(str(audio_path), sampling_rate=self.sample_rate)
         speech_regions = self.vad.get_speech_timestamps(audio)
-        transcripts = [
-            self.transcribe_audio(
-                audio[region["start"] : region["end"]],
-                **transcribe_options,
+        transcripts = []
+        for region in speech_regions:
+            if region["end"] <= region["start"]:
+                continue
+            speech_audio = audio[region["start"] : region["end"]]
+            duration = speech_audio.size / self.sample_rate
+            started = time.perf_counter()
+            try:
+                transcript = self.transcribe_audio(
+                    speech_audio,
+                    **transcribe_options,
+                )
+            except Exception as error:
+                log_speech_event(
+                    event="speech_segment",
+                    source="file",
+                    duration_seconds=duration,
+                    transcription_time_seconds=time.perf_counter() - started,
+                    error=str(error),
+                )
+                raise
+            log_speech_event(
+                event="speech_segment",
+                source="file",
+                duration_seconds=duration,
+                transcript=transcript,
+                transcription_time_seconds=time.perf_counter() - started,
             )
-            for region in speech_regions
-            if region["end"] > region["start"]
-        ]
+            transcripts.append(transcript)
         return " ".join(text for text in transcripts if text)
 
     def transcribe_microphone(self, input_device: int | None = None) -> None:
@@ -106,7 +148,7 @@ class WhisperSTT(WhisperTranscriber):
         import sounddevice as sd
 
         audio_queue: queue.Queue[np.ndarray] = queue.Queue()
-        transcription_queue: queue.Queue[np.ndarray | None] = queue.Queue()
+        transcription_queue: queue.Queue[tuple[np.ndarray, float] | None] = queue.Queue()
         transcription_errors: queue.Queue[Exception] = queue.Queue(maxsize=1)
         pre_roll: deque[np.ndarray] = deque(
             maxlen=round(self.pre_roll_duration * self.sample_rate / self.frame_size)
@@ -120,19 +162,37 @@ class WhisperSTT(WhisperTranscriber):
         speech_frames: list[np.ndarray] = []
         silence_frames = 0
         is_speaking = False
+        processed_audio_frames = 0
+        speech_start_frame: int | None = None
+        speech_end_frame: int | None = None
 
         def transcribe_in_background() -> None:
             while True:
-                speech_audio = transcription_queue.get()
-                if speech_audio is None:
+                item = transcription_queue.get()
+                if item is None:
                     return
+                speech_audio, duration = item
+                started = time.perf_counter()
                 try:
-                    duration = speech_audio.size / self.sample_rate
                     print(f"Transcribing detected speech ({duration:.1f}s)...", flush=True)
                     transcript = self._transcribe(speech_audio)
                     if transcript:
                         print(transcript, flush=True)
+                    log_speech_event(
+                        event="speech_segment",
+                        source="live",
+                        duration_seconds=duration,
+                        transcript=transcript,
+                        transcription_time_seconds=time.perf_counter() - started,
+                    )
                 except Exception as error:
+                    log_speech_event(
+                        event="speech_segment",
+                        source="live",
+                        duration_seconds=duration,
+                        transcription_time_seconds=time.perf_counter() - started,
+                        error=str(error),
+                    )
                     transcription_errors.put(error)
                     return
 
@@ -177,6 +237,7 @@ class WhisperSTT(WhisperTranscriber):
                             frame = audio_queue.get(timeout=0.1)
                         except queue.Empty:
                             continue
+                        processed_audio_frames += 1
                         speech_probability = self.vad.speech_probability(frame)
 
                         if not is_speaking:
@@ -185,10 +246,13 @@ class WhisperSTT(WhisperTranscriber):
                                 is_speaking = True
                                 speech_frames = list(pre_roll)
                                 silence_frames = 0
+                                speech_start_frame = processed_audio_frames
+                                speech_end_frame = processed_audio_frames
                         else:
                             speech_frames.append(frame)
                             if speech_probability >= 0.5:
                                 silence_frames = 0
+                                speech_end_frame = processed_audio_frames
                             else:
                                 silence_frames += 1
 
@@ -197,15 +261,35 @@ class WhisperSTT(WhisperTranscriber):
                             or len(speech_frames) >= max_speech_frames
                         )
                         if should_finalize:
-                            transcription_queue.put(np.concatenate(speech_frames))
+                            assert speech_start_frame is not None
+                            assert speech_end_frame is not None
+                            duration = (
+                                (speech_end_frame - speech_start_frame + 1)
+                                * self.frame_size
+                                / self.sample_rate
+                            )
+                            transcription_queue.put(
+                                (np.concatenate(speech_frames), duration)
+                            )
                             self.vad.reset_states()
                             speech_frames = []
                             silence_frames = 0
                             is_speaking = False
+                            speech_start_frame = None
+                            speech_end_frame = None
                             pre_roll.clear()
                 except KeyboardInterrupt:
                     if speech_frames:
-                        transcription_queue.put(np.concatenate(speech_frames))
+                        assert speech_start_frame is not None
+                        assert speech_end_frame is not None
+                        duration = (
+                            (speech_end_frame - speech_start_frame + 1)
+                            * self.frame_size
+                            / self.sample_rate
+                        )
+                        transcription_queue.put(
+                            (np.concatenate(speech_frames), duration)
+                        )
                     print("\nStopped listening.")
         finally:
             transcription_queue.put(None)

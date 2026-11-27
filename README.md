@@ -52,6 +52,18 @@ python main.py --component vad
 
 The transcription-only mode accepts an audio file. The VAD-only mode tests
 microphone speech detection and prints when speech or silence is detected.
+While running VAD-only mode, a health line appears every five seconds with the
+audio RMS level, current speech probability, and any dropped audio frames or
+input overflows. If the RMS stays near zero while you speak, check the selected
+microphone with `--input-device`.
+
+Speech events and transcripts are written locally as JSON Lines to
+`logs/speech.log`. VAD-only mode logs each detected speech segment and its
+duration. Live and VAD-enabled file transcription also log the segment duration
+and transcript together, including `transcription_time_seconds` for Whisper
+inference. Whisper-only file transcription logs the transcript, audio duration,
+and inference time. The log is rotated when it grows and is excluded from Git;
+transcripts may contain private speech, so review the log before sharing it.
 
 ## Module layout
 
