@@ -1,0 +1,11 @@
+# M1 — User Interaction
+faster-whisper
+torch
+torchaudio
+numpy
+sounddevice
+
+# M2 — Real-Time Environmental Perception
+opencv-python
+ultralytics
+
