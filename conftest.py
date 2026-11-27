@@ -10,3 +10,4 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Skip tests that require a live IP Webcam stream.",
     )
+
