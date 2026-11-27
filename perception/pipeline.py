@@ -32,8 +32,9 @@ class PerceptionPipeline:
         stream_url:           IP Webcam MJPEG URL,
                               e.g. ``"http://192.168.1.5:8080/video"``.
         model_name:           YOLOv8 model identifier or ``.pt`` path.
-                              Defaults to ``"yolov8n.pt"`` (nano).
-        confidence_threshold: Minimum detection confidence.  Defaults to ``0.5``.
+                              Defaults to ``"yolov8s.pt"`` (small — better
+                              accuracy than nano with acceptable CPU speed).
+        confidence_threshold: Minimum detection confidence.  Defaults to ``0.35``.
         input_size:           Preprocessor resize target ``(w, h)``.
                               Pass ``None`` to skip resizing.
 
@@ -48,8 +49,8 @@ class PerceptionPipeline:
     def __init__(
         self,
         stream_url: str,
-        model_name: str = "yolov8n.pt",
-        confidence_threshold: float = 0.5,
+        model_name: str = "yolov8s.pt",
+        confidence_threshold: float = 0.35,
         input_size: tuple[int, int] | None = (640, 640),
     ) -> None:
         self._stream = IPWebcamStream(stream_url)

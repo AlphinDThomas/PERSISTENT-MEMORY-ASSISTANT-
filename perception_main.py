@@ -12,10 +12,10 @@ Single image file (no camera needed)::
 
 Options::
 
-    --url URL             IP Webcam stream URL (default: http://192.168.1.5:8080/video)
+    --url URL             IP Webcam stream URL (default: http://192.168.31.182:8080/video)
     --image PATH          Path to a static image file (skips live stream)
-    --model MODEL         YOLOv8 model name or .pt path (default: yolov8n.pt)
-    --confidence FLOAT    Detection confidence threshold (default: 0.5)
+    --model MODEL         YOLOv8 model name or .pt path (default: yolov8s.pt)
+    --confidence FLOAT    Detection confidence threshold (default: 0.35)
     --no-display          Suppress OpenCV preview window
 """
 
@@ -31,7 +31,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--url",
-        default="http://192.168.1.5:8080/video",
+        default="http://192.168.31.182:8080/video",
         help="IP Webcam stream URL (default: %(default)s)",
     )
     parser.add_argument(
@@ -42,13 +42,13 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="yolov8n.pt",
+        default="yolov8s.pt",
         help="YOLOv8 model name or .pt path (default: %(default)s)",
     )
     parser.add_argument(
         "--confidence",
         type=float,
-        default=0.5,
+        default=0.35,
         help="Minimum detection confidence threshold (default: %(default)s)",
     )
     parser.add_argument(

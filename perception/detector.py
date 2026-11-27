@@ -15,20 +15,23 @@ class ObjectDetector:
 
     Args:
         model_name:           Ultralytics model identifier or path to a local
-                              ``.pt`` weights file.  Defaults to ``"yolov8n.pt"``
-                              (nano — lowest latency, suitable for real-time use
-                              on CPU).
+                              ``.pt`` weights file.  Defaults to ``"yolov8s.pt"``
+                              (small — good accuracy/speed balance on CPU).
         confidence_threshold: Minimum confidence score [0.0, 1.0] for a
                               detection to be included in the output.
-                              Defaults to ``0.5``.
+                              Defaults to ``0.35``.
+        iou_threshold:        IoU threshold for non-maximum suppression.
+                              Lower values reduce overlapping boxes.
+                              Defaults to ``0.45``.
         device:               Inference device.  ``None`` lets Ultralytics pick
                               automatically (GPU when available, else CPU).
     """
 
     def __init__(
         self,
-        model_name: str = "yolov8n.pt",
-        confidence_threshold: float = 0.5,
+        model_name: str = "yolov8s.pt",
+        confidence_threshold: float = 0.35,
+        iou_threshold: float = 0.45,
         device: str | None = None,
     ) -> None:
         print(
@@ -40,6 +43,7 @@ class ObjectDetector:
         if device is not None:
             self._model.to(device)
         self._confidence_threshold = confidence_threshold
+        self._iou_threshold = iou_threshold
         print(f"YOLO model '{model_name}' is ready.", flush=True)
 
     @property
@@ -63,7 +67,12 @@ class ObjectDetector:
             * ``"confidence"``  — float in [0.0, 1.0].
             * ``"bounding_box"``— ``(x1, y1, x2, y2)`` int tuple in pixels.
         """
-        results = self._model(frame, verbose=False)
+        results = self._model(
+            frame,
+            verbose=False,
+            conf=self._confidence_threshold,
+            iou=self._iou_threshold,
+        )
         detections: list[dict[str, object]] = []
 
         for result in results:
